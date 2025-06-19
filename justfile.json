@@ -1,0 +1,705 @@
+{
+  "aliases": {
+    "c": {
+      "attributes": [],
+      "name": "c",
+      "target": "check"
+    },
+    "d": {
+      "attributes": [],
+      "name": "d",
+      "target": "docs"
+    },
+    "doc": {
+      "attributes": [],
+      "name": "doc",
+      "target": "docs"
+    },
+    "r": {
+      "attributes": [],
+      "name": "r",
+      "target": "run"
+    },
+    "s": {
+      "attributes": [],
+      "name": "s",
+      "target": "run"
+    },
+    "serve": {
+      "attributes": [],
+      "name": "serve",
+      "target": "run"
+    },
+    "t": {
+      "attributes": [],
+      "name": "t",
+      "target": "test"
+    },
+    "timing": {
+      "attributes": [],
+      "name": "timing",
+      "target": "timings"
+    }
+  },
+  "assignments": {
+    "msrv": {
+      "export": false,
+      "name": "msrv",
+      "value": "1.74"
+    },
+    "nightly": {
+      "export": false,
+      "name": "nightly",
+      "value": "nightly-2024-04-16"
+    },
+    "rust": {
+      "export": false,
+      "name": "rust",
+      "value": [
+        "call",
+        "env",
+        "RUSTUP_TOOLCHAIN",
+        "stable"
+      ]
+    }
+  },
+  "first": "all",
+  "modules": {},
+  "recipes": {
+    "all": {
+      "attributes": [],
+      "body": [
+        [
+          "@echo \"All checks passed 🍻\""
+        ]
+      ],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "fmt"
+        },
+        {
+          "arguments": [],
+          "recipe": "check-all"
+        },
+        {
+          "arguments": [],
+          "recipe": "deny"
+        },
+        {
+          "arguments": [],
+          "recipe": "clippy"
+        },
+        {
+          "arguments": [],
+          "recipe": "docs"
+        },
+        {
+          "arguments": [],
+          "recipe": "test"
+        },
+        {
+          "arguments": [],
+          "recipe": "machete"
+        },
+        {
+          "arguments": [],
+          "recipe": "udeps"
+        },
+        {
+          "arguments": [],
+          "recipe": "msrv"
+        }
+      ],
+      "doc": "Run all checks",
+      "name": "all",
+      "namepath": "all",
+      "parameters": [],
+      "priors": 9,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "all-docs": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " doc --all-features"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "all-docs",
+      "namepath": "all-docs",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "build": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " build --release"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Build the library in release mode",
+      "name": "build",
+      "namepath": "build",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "check": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " check --all-targets --all-features"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Check compilation",
+      "name": "check",
+      "namepath": "check",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "check-all": {
+      "attributes": [],
+      "body": [],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "check"
+        }
+      ],
+      "doc": "Check compilation across all features",
+      "name": "check-all",
+      "namepath": "check-all",
+      "parameters": [],
+      "priors": 1,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "clippy": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " clippy --all-targets --all-features -- -D warnings"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Run clippy",
+      "name": "clippy",
+      "namepath": "clippy",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "coverage": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " tarpaulin -o html --all-features"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Run coverage tests",
+      "name": "coverage",
+      "namepath": "coverage",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "deny": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " deny check"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Run deny checks",
+      "name": "deny",
+      "namepath": "deny",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "docs": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " doc --all-features --no-deps"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Build documentation",
+      "name": "docs",
+      "namepath": "docs",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "fmt": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " fmt --all --check"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Run fmt checks",
+      "name": "fmt",
+      "namepath": "fmt",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "lint": {
+      "attributes": [],
+      "body": [
+        [
+          "@echo \"Lints passed 🧹\""
+        ]
+      ],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "fmt"
+        },
+        {
+          "arguments": [],
+          "recipe": "clippy"
+        }
+      ],
+      "doc": null,
+      "name": "lint",
+      "namepath": "lint",
+      "parameters": [],
+      "priors": 2,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "machete": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " machete --skip-target-dir"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Use machete to check for unused dependencies",
+      "name": "machete",
+      "namepath": "machete",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "msrv": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "msrv"
+            ]
+          ],
+          " check --target-dir target/msrv/ --all-targets --all-features"
+        ],
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "msrv"
+            ]
+          ],
+          " doc --target-dir target/msrv/ --all-features --no-deps"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Check support for MSRV",
+      "name": "msrv",
+      "namepath": "msrv",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "pre-commit": {
+      "attributes": [],
+      "body": [
+        [
+          "pre-commit run --all-files"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Run pre-commit checks",
+      "name": "pre-commit",
+      "namepath": "pre-commit",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "pre-commit-ci": {
+      "attributes": [
+        "private"
+      ],
+      "body": [
+        [
+          "SKIP=cargo-machete,fmt,check,clippy pre-commit run --color=always --all-files --show-diff-on-failure --hook-stage commit"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "pre-commit-ci",
+      "namepath": "pre-commit-ci",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "read": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " doc --all-features --no-deps --open"
+        ]
+      ],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "docs"
+        }
+      ],
+      "doc": "Build and read documentation",
+      "name": "read",
+      "namepath": "read",
+      "parameters": [],
+      "priors": 1,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "run": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " run --all-features"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Run the project",
+      "name": "run",
+      "namepath": "run",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "test": {
+      "attributes": [],
+      "body": [],
+      "dependencies": [
+        {
+          "arguments": [],
+          "recipe": "test-build"
+        },
+        {
+          "arguments": [],
+          "recipe": "test-run"
+        }
+      ],
+      "doc": "Run cargo tests",
+      "name": "test",
+      "namepath": "test",
+      "parameters": [],
+      "priors": 2,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "test-build": {
+      "attributes": [
+        "private"
+      ],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " nextest run --all-features --no-run"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "test-build",
+      "namepath": "test-build",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "test-run": {
+      "attributes": [
+        "private"
+      ],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " nextest run --all-features"
+        ],
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " test --all-features --doc"
+        ]
+      ],
+      "dependencies": [],
+      "doc": null,
+      "name": "test-run",
+      "namepath": "test-run",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "timings": {
+      "attributes": [],
+      "body": [
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "rust"
+            ]
+          ],
+          " build --all-features --timings"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Compile with timing checks",
+      "name": "timings",
+      "namepath": "timings",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": false
+    },
+    "udeps": {
+      "attributes": [],
+      "body": [
+        [
+          "#!/usr/bin/env sh"
+        ],
+        [
+          "set -euo pipefail"
+        ],
+        [],
+        [
+          "bold() {"
+        ],
+        [
+          "    echo \"\\033[1m$1\\033[0m\""
+        ],
+        [
+          "}"
+        ],
+        [],
+        [
+          "export CARGO_TARGET_DIR=\"target/hack/\""
+        ],
+        [
+          "bold \"cargo +",
+          [
+            [
+              "variable",
+              "nightly"
+            ]
+          ],
+          " udeps\""
+        ],
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "nightly"
+            ]
+          ],
+          " udeps  --all-features"
+        ],
+        [
+          "bold \"cargo +",
+          [
+            [
+              "variable",
+              "nightly"
+            ]
+          ],
+          " hack udeps\""
+        ],
+        [
+          "cargo +",
+          [
+            [
+              "variable",
+              "nightly"
+            ]
+          ],
+          " hack udeps --each-feature"
+        ]
+      ],
+      "dependencies": [],
+      "doc": "Check for unused dependencies",
+      "name": "udeps",
+      "namepath": "udeps",
+      "parameters": [],
+      "priors": 0,
+      "private": false,
+      "quiet": false,
+      "shebang": true
+    }
+  },
+  "settings": {
+    "allow_duplicate_recipes": false,
+    "dotenv_filename": null,
+    "dotenv_load": null,
+    "dotenv_path": null,
+    "export": false,
+    "fallback": false,
+    "ignore_comments": false,
+    "positional_arguments": false,
+    "quiet": false,
+    "shell": null,
+    "tempdir": null,
+    "windows_powershell": false,
+    "windows_shell": null
+  },
+  "warnings": []
+}

@@ -23,3 +23,9 @@ tracing-subscriber = { version = "0.3.19", features = [
 ] }
 clap = "4.5.40"
 toml_edit = "0.22.27"
+serde = { version = "1.0.219", features = ["derive"], optional = true }
+serde_json = { version = "1.0.140", optional = true }
+
+[features]
+default = ["just"]
+just = ["dep:serde", "dep:serde_json"]
