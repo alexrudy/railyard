@@ -1,0 +1,25 @@
+[package]
+name = "railyard"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+owo-colors = "4.2.1"
+indicatif = "0.17"
+tokio = { version = "1.45.0", features = [
+    "rt",
+    "process",
+    "macros",
+    "sync",
+    "io-util",
+    "io-std",
+    "time",
+] }
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.19", features = [
+    "std",
+    "fmt",
+    "env-filter",
+] }
+clap = "4.5.40"
+toml_edit = "0.22.27"

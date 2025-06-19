@@ -1,0 +1,2 @@
+format = ["just", "fmt"]
+clippy = ["cargo", "clippy"]
