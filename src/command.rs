@@ -9,7 +9,7 @@ use std::{
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize as _;
 use tokio::{
-    io::{AsyncBufReadExt as _, AsyncWriteExt as _, BufReader},
+    io::{AsyncBufReadExt as _, AsyncWrite, AsyncWriteExt, BufReader},
     sync::{mpsc, oneshot, watch},
     task::JoinHandle,
 };
@@ -50,7 +50,7 @@ impl Commands {
         );
         let (cmd, reporter) = Command::new(
             name.clone(),
-            args.into_iter().map(Into::into).collect(),
+            args.iter().map(Into::into).collect(),
             pb,
             self.sender.clone().unwrap(),
         );
@@ -70,7 +70,7 @@ impl Commands {
         self.sender.take();
 
         self.local_set.spawn_local(async move {
-            while let Some(_) = notify.recv().await {
+            while notify.recv().await.is_some() {
                 pb.inc(1);
             }
             pb.finish();
@@ -87,14 +87,53 @@ impl Commands {
                 exit = ExitCode::FAILURE;
             }
         }
-
+        let mut stderr = tokio::io::stderr();
         if self.show_reports {
+            eprint_centered(&mut stderr, format!(" {} Tasks Failed ", reports.len()))
+                .await
+                .unwrap();
+
             for output in &reports {
-                let _ = tokio::io::stderr().write_all(&output.buffer).await;
+                eprint_centered(&mut stderr, format!(" {} ", output.name))
+                    .await
+                    .unwrap();
+                let _ = stderr.write_all(&output.buffer).await;
+                stderr.flush().await.unwrap();
             }
-        }
+            eprint_centered(&mut stderr, format!(" {} Tasks Failed ", reports.len()))
+                .await
+                .unwrap();
+            for output in &reports {
+                let summary = format!(
+                    "{}: {} with {}",
+                    output.name.bold().dimmed(),
+                    "exited".red().bold(),
+                    output.exit_code
+                );
+
+                eprintln(&mut stderr, summary).await.unwrap();
+            }
+        };
+        stderr.flush().await.unwrap();
         exit
     }
+}
+
+async fn eprintln<S>(output: &mut S, message: impl AsRef<str>) -> io::Result<()>
+where
+    S: AsyncWrite + Unpin,
+{
+    let message = format!("{}\n", message.as_ref());
+    output.write_all(message.as_bytes()).await?;
+    output.flush().await
+}
+
+async fn eprint_centered<S>(output: &mut S, message: impl AsRef<str>) -> io::Result<()>
+where
+    S: AsyncWrite + Unpin,
+{
+    let message = format!("{:=^width$}", message.as_ref(), width = 80);
+    eprintln(output, message).await
 }
 
 struct Command {
@@ -182,13 +221,7 @@ impl Command {
             }
         }
 
-        if let Err(_) = self.outcome.send(report.unwrap()) {
-            eprintln!(
-                "{}: {}",
-                "INTERNAL ERROR".red(),
-                "Unable to send command outcome"
-            );
-        }
+        let _ = self.outcome.send(report.unwrap());
         let _ = self.notify.send(()).await;
     }
 }
@@ -210,7 +243,7 @@ fn process_stream(
                 command.name,
                 String::from_utf8_lossy(line).strip_suffix('\n').unwrap()
             );
-            buffer.extend_from_slice(&line);
+            buffer.extend_from_slice(line);
             let _ = command.watcher.send(Some(Vec::from(line.as_slice())));
             line.clear();
             None
@@ -224,6 +257,7 @@ fn process_stream(
 
 #[derive(Debug)]
 struct CommandOutput {
+    name: String,
     exit_code: i32,
     buffer: Vec<u8>,
 }
@@ -242,6 +276,7 @@ impl CommandReport {
             Ok(status) => {
                 let output = std::mem::take(buffer);
                 CommandReport::Failed(CommandOutput {
+                    name: command.name.clone(),
                     exit_code: status.code().unwrap(),
                     buffer: output,
                 })

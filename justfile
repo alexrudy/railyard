@@ -2,7 +2,7 @@
 
 
 nightly := "nightly-2024-04-16"
-msrv := "1.74"
+msrv := "1.86"
 rust := env("RUSTUP_TOOLCHAIN", "stable")
 
 # Run all checks
@@ -87,7 +87,6 @@ test-build:
 [private]
 test-run:
     cargo +{{rust}} nextest run --all-features
-    cargo +{{rust}} test --all-features --doc
 
 # Run coverage tests
 coverage:

@@ -10,7 +10,7 @@ pub async fn read_justfile_for_target<P: AsRef<Path>>(
     target: Option<&str>,
 ) -> io::Result<()> {
     let mut cmd = tokio::process::Command::new("just");
-    cmd.args(&["--dump", "--dump-format=json"]);
+    cmd.args(["--dump", "--dump-format=json"]);
     if let Some(path) = justfile_path.as_ref() {
         cmd.arg("--justfile");
         cmd.arg(path.as_ref());
