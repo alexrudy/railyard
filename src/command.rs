@@ -96,7 +96,7 @@ impl Commands {
             }
         }
         let mut stderr = tokio::io::stderr();
-        if self.show_reports {
+        if self.show_reports && !reports.is_empty() {
             eprint_centered(&mut stderr, format!(" {} Tasks Failed ", reports.len()))
                 .await
                 .unwrap();
