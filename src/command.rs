@@ -3,6 +3,7 @@ use std::{
     ffi::{OsStr, OsString},
     io,
     process::{ExitCode, ExitStatus, Stdio},
+    rc::Rc,
     time::Duration,
 };
 
@@ -10,7 +11,7 @@ use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize as _;
 use tokio::{
     io::{AsyncBufReadExt as _, AsyncWrite, AsyncWriteExt, BufReader},
-    sync::{mpsc, oneshot, watch},
+    sync::{Semaphore, mpsc, oneshot, watch},
     task::JoinHandle,
 };
 
@@ -18,6 +19,7 @@ use crate::{RailyardError, RailyardErrorKind};
 
 #[must_use = "Commands wont run without calling run()"]
 pub(crate) struct Commands {
+    semaphore: Rc<Semaphore>,
     local_set: tokio::task::LocalSet,
     notify: mpsc::Receiver<()>,
     sender: Option<mpsc::Sender<()>>,
@@ -28,9 +30,15 @@ pub(crate) struct Commands {
 }
 
 impl Commands {
-    pub(crate) fn new(progress: MultiProgress, style: ProgressStyle, show_reports: bool) -> Self {
+    pub(crate) fn new(
+        progress: MultiProgress,
+        style: ProgressStyle,
+        show_reports: bool,
+        jobs: usize,
+    ) -> Self {
         let (tx, rx) = mpsc::channel(32);
         Self {
+            semaphore: Rc::new(Semaphore::new(jobs)),
             local_set: tokio::task::LocalSet::new(),
             notify: rx,
             sender: Some(tx),
@@ -54,7 +62,7 @@ impl Commands {
             pb,
             self.sender.clone().unwrap(),
         );
-        self.local_set.spawn_local(cmd.run());
+        self.local_set.spawn_local(cmd.run(self.semaphore.clone()));
         let handle = self.local_set.spawn_local(reporter.run());
         self.reports.insert(name, handle);
     }
@@ -172,7 +180,7 @@ impl Command {
         (command, reporter)
     }
 
-    async fn run(mut self) {
+    async fn run(mut self, semaphore: Rc<Semaphore>) {
         let Some((prog, args)) = self.args.split_first() else {
             let _ = self.outcome.send(CommandReport::Error(RailyardError {
                 command: self.name.clone(),
@@ -181,6 +189,7 @@ impl Command {
             let _ = self.notify.send(()).await;
             return;
         };
+        let permit = semaphore.acquire().await.unwrap();
 
         tracing::debug!("Spawning {:?} with arguments {:?}", prog, args);
         let mut child = match tokio::process::Command::new(prog)
@@ -220,7 +229,7 @@ impl Command {
                 break;
             }
         }
-
+        drop(permit);
         let _ = self.outcome.send(report.unwrap());
         let _ = self.notify.send(()).await;
     }

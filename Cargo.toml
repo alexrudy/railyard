@@ -3,9 +3,14 @@ name = "railyard"
 version = "0.1.0"
 edition = "2024"
 
+[[bin]]
+name = "ry"
+path = "src/main.rs"
+
 [dependencies]
 owo-colors = "4.2.1"
 indicatif = "0.17"
+num_cpus = "1.0"
 tokio = { version = "1.45.0", features = [
     "rt",
     "process",

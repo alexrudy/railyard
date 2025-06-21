@@ -88,6 +88,7 @@ async fn main() -> Result<ExitCode, RailyardError> {
                 .num_args(0..=2)
                 .conflicts_with("railyard"),
         )
+        .arg(arg!(--jobs <n> "How many parallel jobs to run").value_parser(value_parser!(usize)))
         .author("Alex Rudy <opensource@alexrudy.net>")
         .version("0.1")
         .get_matches();
@@ -101,7 +102,12 @@ async fn main() -> Result<ExitCode, RailyardError> {
         m.set_draw_target(ProgressDrawTarget::hidden());
     }
 
-    let mut commands = Commands::new(m, spinner_style, program.get_flag("reports"));
+    let jobs = program
+        .get_one::<usize>("jobs")
+        .copied()
+        .unwrap_or_else(|| num_cpus::get());
+
+    let mut commands = Commands::new(m, spinner_style, program.get_flag("reports"), jobs);
 
     if let Some(railyard) = program.get_one::<PathBuf>("railyard") {
         read_railyard_file(&mut commands, railyard).expect("Valid railyard file");
