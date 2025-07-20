@@ -8,6 +8,7 @@ name = "ry"
 path = "src/main.rs"
 
 [dependencies]
+futures = "0.3"
 owo-colors = "4.2.1"
 indicatif = "0.17"
 num_cpus = "1.0"

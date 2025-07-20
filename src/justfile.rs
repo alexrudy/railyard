@@ -1,4 +1,9 @@
-use std::{collections::BTreeMap, ffi::OsString, io, path::Path};
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    ffi::OsString,
+    io,
+    path::Path,
+};
 
 use serde::Deserialize;
 
@@ -36,15 +41,48 @@ pub async fn read_justfile_for_target<P: AsRef<Path>>(
         ));
     };
 
-    for dep in &recipe.dependencies {
-        let mut args: Vec<OsString> = vec!["just".into()];
+    let mut args: Vec<OsString> = vec!["just".into(), "--no-deps".into()];
+    if let Some(path) = justfile_path.as_ref() {
+        args.push("--justfile".into());
+        args.push(path.as_ref().into());
+    }
+    args.push(recipe.name.clone().into());
+    commands.dependent_command(
+        &recipe.name,
+        &args,
+        &recipe
+            .dependencies
+            .iter()
+            .map(|d| d.name())
+            .collect::<Vec<_>>(),
+    );
+
+    let mut prepared = BTreeSet::new();
+    let mut queue = VecDeque::new();
+    queue.extend(recipe.dependencies.clone());
+
+    while let Some(dep) = queue.pop_front() {
+        if !prepared.insert(dep.name()) {
+            continue;
+        }
+
+        let mut args: Vec<OsString> = vec!["just".into(), "--no-deps".into()];
         if let Some(path) = justfile_path.as_ref() {
             args.push("--justfile".into());
             args.push(path.as_ref().into());
         }
         args.push(dep.recipe.clone().into());
         args.extend(dep.arguments.iter().cloned().map(Into::into));
-        commands.command(&dep.recipe, &args);
+        let deps = if let Some(drep) = justfile.recipe(&dep.recipe) {
+            for dd in &drep.dependencies {
+                queue.push_back(dd.clone());
+            }
+            drep.dependencies.iter().map(|d| d.name()).collect()
+        } else {
+            vec![]
+        };
+
+        commands.dependent_command(&dep.name(), &args, &deps);
     }
 
     Ok(())
@@ -69,6 +107,16 @@ struct Recipe {
 struct Dependency {
     recipe: String,
     arguments: Vec<String>,
+}
+
+impl Dependency {
+    fn name(&self) -> String {
+        if self.arguments.is_empty() {
+            self.recipe.clone()
+        } else {
+            format!("{}({})", self.recipe, self.arguments.join(","))
+        }
+    }
 }
 
 #[derive(Debug, Clone, Deserialize)]

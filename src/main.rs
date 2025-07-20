@@ -23,6 +23,7 @@ mod railfile;
 #[allow(dead_code)]
 enum RailyardErrorKind {
     InvalidArguments,
+    Cancelled,
     SpawnError(io::Error),
     CommandError(io::Error),
     StreamError(io::Error),
@@ -36,6 +37,7 @@ impl RailyardErrorKind {
         match self {
             RailyardErrorKind::InvalidArguments => USAGE_ERROR.into(),
             RailyardErrorKind::SpawnError(_) => USAGE_ERROR.into(),
+            RailyardErrorKind::Cancelled => USAGE_ERROR.into(),
             RailyardErrorKind::CommandError(_) => INTERNAL_ERROR.into(),
             RailyardErrorKind::StreamError(_) => INTERNAL_ERROR.into(),
         }

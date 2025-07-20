@@ -1,12 +1,14 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, btree_map::Entry},
     ffi::{OsStr, OsString},
-    io,
+    fmt, io,
     process::{ExitCode, ExitStatus, Stdio},
     rc::Rc,
+    sync::{Arc, Mutex},
     time::Duration,
 };
 
+use futures::{FutureExt, TryStreamExt as _, stream::FuturesUnordered};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use owo_colors::OwoColorize as _;
 use tokio::{
@@ -17,6 +19,118 @@ use tokio::{
 
 use crate::{RailyardError, RailyardErrorKind};
 
+enum Dependency {
+    Waiting(
+        Option<(
+            tokio::sync::broadcast::Sender<()>,
+            tokio::sync::broadcast::Receiver<()>,
+            Vec<String>,
+        )>,
+    ),
+    Ready,
+}
+
+impl fmt::Debug for Dependency {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Dependency::Waiting(_) => write!(f, "Waiting"),
+            Dependency::Ready => write!(f, "Recieved"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct Dependencies {
+    dependencies: Arc<Mutex<BTreeMap<String, Dependency>>>,
+}
+
+#[derive(Debug)]
+struct Cancelled;
+
+impl Dependencies {
+    fn new() -> Self {
+        Self {
+            dependencies: Arc::new(Mutex::new(BTreeMap::new())),
+        }
+    }
+
+    fn cancel(&self) -> String {
+        use std::fmt::Write;
+        let mut map = self.dependencies.lock().expect("map invariant: poisoned");
+        let mut msg = String::new();
+        for (item, dep) in map.iter() {
+            if let Dependency::Waiting(Some((_, _, waiters))) = dep {
+                writeln!(
+                    &mut msg,
+                    "cancelling {item}: awaited by {}",
+                    waiters.join(",")
+                )
+                .unwrap();
+            }
+        }
+        map.clear();
+        msg
+    }
+
+    async fn wait(&self, source: String, name: impl Into<String>) -> Result<(), Cancelled> {
+        {
+            let name = name.into();
+            tracing::trace!("checking for {name}");
+            let mut rx = {
+                let (tx, rx) = tokio::sync::broadcast::channel(1);
+                let mut map = self.dependencies.lock().expect("map invariant: poisoned");
+                match map
+                    .entry(name.clone())
+                    .or_insert_with(|| Dependency::Waiting(Some((tx, rx, Vec::new()))))
+                {
+                    Dependency::Waiting(Some((tx, _, waiters))) => {
+                        waiters.push(source);
+                        tx.subscribe()
+                    }
+                    Dependency::Waiting(None) => {
+                        panic!("map invariant: subscriber must be present")
+                    }
+                    Dependency::Ready => {
+                        tracing::trace!("{name} already ready");
+                        return Ok(());
+                    }
+                }
+            };
+
+            tracing::trace!("waiting for {name}");
+            rx.recv().await.map_err(|_| Cancelled)
+        }
+    }
+
+    fn ready(&self, name: impl Into<String>) {
+        let name = name.into();
+        let mut map = self.dependencies.lock().expect("map invariant: poisoned");
+        match map.entry(name.clone()) {
+            Entry::Occupied(mut entry) => {
+                tracing::trace!("Notifying occupied entry for {name}");
+                let value = entry.get_mut();
+                *value = match value {
+                    Dependency::Waiting(broadcast) => {
+                        let (tx, _, _) = broadcast.take().unwrap();
+                        if tx.send(()).is_err() {
+                            panic!("map invariant: unable to notify {name}");
+                        }
+                        tracing::trace!("notified {name}");
+                        Dependency::Ready
+                    }
+                    Dependency::Ready => {
+                        panic!("map invariant: already notified for {name}");
+                    }
+                };
+            }
+            Entry::Vacant(entry) => {
+                tracing::trace!("marking {name} as ready");
+                entry.insert(Dependency::Ready);
+            }
+        };
+    }
+}
+
 #[must_use = "Commands wont run without calling run()"]
 pub(crate) struct Commands {
     semaphore: Rc<Semaphore>,
@@ -25,6 +139,8 @@ pub(crate) struct Commands {
     sender: Option<mpsc::Sender<()>>,
     progress: MultiProgress,
     style: ProgressStyle,
+    dependencies: Dependencies,
+    free_commands: usize,
     reports: BTreeMap<String, JoinHandle<Option<CommandReport>>>,
     show_reports: bool,
 }
@@ -44,9 +160,40 @@ impl Commands {
             sender: Some(tx),
             progress,
             style,
+            dependencies: Dependencies::new(),
+            free_commands: 0,
             reports: BTreeMap::new(),
             show_reports,
         }
+    }
+
+    pub(crate) fn dependent_command<A: AsRef<OsStr>>(
+        &mut self,
+        name: impl Into<String>,
+        args: &[A],
+        dependencies: &[String],
+    ) {
+        let name = name.into();
+        let pb = self.progress.add(
+            ProgressBar::new_spinner()
+                .with_style(self.style.clone())
+                .with_prefix(name.clone()),
+        );
+        if dependencies.is_empty() {
+            self.free_commands += 1;
+        }
+
+        let (cmd, reporter) = Command::new(
+            name.clone(),
+            args.iter().map(Into::into).collect(),
+            pb,
+            self.sender.clone().unwrap(),
+            dependencies.to_vec(),
+        );
+        self.local_set
+            .spawn_local(cmd.run(self.semaphore.clone(), self.dependencies.clone()));
+        let handle = self.local_set.spawn_local(reporter.run());
+        self.reports.insert(name, handle);
     }
 
     pub(crate) fn command<A: AsRef<OsStr>>(&mut self, name: impl Into<String>, args: &[A]) {
@@ -56,32 +203,68 @@ impl Commands {
                 .with_style(self.style.clone())
                 .with_prefix(name.clone()),
         );
+        self.free_commands += 1;
         let (cmd, reporter) = Command::new(
             name.clone(),
             args.iter().map(Into::into).collect(),
             pb,
             self.sender.clone().unwrap(),
+            Vec::new(),
         );
-        self.local_set.spawn_local(cmd.run(self.semaphore.clone()));
+        self.local_set
+            .spawn_local(cmd.run(self.semaphore.clone(), self.dependencies.clone()));
         let handle = self.local_set.spawn_local(reporter.run());
         self.reports.insert(name, handle);
     }
 
     pub(crate) async fn run(mut self) -> ExitCode {
+        if self.free_commands == 0 {
+            eprintln!(
+                "[{}]: No commands without dependencies",
+                "ERROR".red().bold()
+            );
+            return ExitCode::FAILURE;
+        }
+
         let pb = self
             .progress
             .add(ProgressBar::new(self.reports.len() as _).with_style(
-                ProgressStyle::with_template("[{pos:.bold}/{len:.bold.dim}] {bar}").unwrap(),
+                ProgressStyle::with_template("[{pos:.bold}/{len:.bold.dim}] {bar} {msg}").unwrap(),
             ));
 
         let mut notify = self.notify;
         self.sender.take();
+        let sem = self.semaphore.clone();
+        let permits = sem.available_permits();
+        let deps = self.dependencies.clone();
+        let handle = self.local_set.spawn_local(async move {
+            let mut no_progress_found = 0;
+            loop {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                if sem.available_permits() == permits {
+                    no_progress_found += 1;
+                } else {
+                    no_progress_found = 0;
+                }
+
+                if no_progress_found > 5 {
+                    return deps.cancel();
+                }
+            }
+        });
+
+        let aborter = handle.abort_handle();
 
         self.local_set.spawn_local(async move {
             while notify.recv().await.is_some() {
                 pb.inc(1);
             }
+            if let Some(Ok(msg)) = handle.now_or_never() {
+                pb.set_message(msg);
+            }
             pb.finish();
+
+            aborter.abort();
         });
 
         self.local_set.await;
@@ -150,6 +333,7 @@ struct Command {
     outcome: oneshot::Sender<CommandReport>,
     watcher: watch::Sender<Option<Vec<u8>>>,
     notify: mpsc::Sender<()>,
+    dependencies: Vec<String>,
 }
 
 impl Command {
@@ -158,6 +342,7 @@ impl Command {
         args: Vec<OsString>,
         progress: ProgressBar,
         notify: mpsc::Sender<()>,
+        dependencies: Vec<String>,
     ) -> (Command, CommandReporter) {
         let (out_tx, out_rx) = oneshot::channel();
         let (watch_tx, watch_rx) = watch::channel(None);
@@ -168,6 +353,7 @@ impl Command {
             outcome: out_tx,
             watcher: watch_tx,
             notify,
+            dependencies,
         };
 
         let reporter = CommandReporter {
@@ -180,7 +366,7 @@ impl Command {
         (command, reporter)
     }
 
-    async fn run(mut self, semaphore: Rc<Semaphore>) {
+    async fn run(mut self, semaphore: Rc<Semaphore>, dependencies: Dependencies) {
         let Some((prog, args)) = self.args.split_first() else {
             let _ = self.outcome.send(CommandReport::Error(RailyardError {
                 command: self.name.clone(),
@@ -189,6 +375,22 @@ impl Command {
             let _ = self.notify.send(()).await;
             return;
         };
+
+        let deps: FuturesUnordered<_> = self
+            .dependencies
+            .iter()
+            .map(|dep| dependencies.wait(self.name.clone(), dep))
+            .collect();
+
+        if let Err(Cancelled) = deps.try_collect::<()>().await {
+            let _ = self.outcome.send(CommandReport::Error(RailyardError {
+                command: self.name.clone(),
+                kind: RailyardErrorKind::Cancelled,
+            }));
+            let _ = self.notify.send(()).await;
+            return;
+        }
+
         let permit = semaphore.acquire().await.unwrap();
 
         tracing::debug!("Spawning {:?} with arguments {:?}", prog, args);
@@ -230,6 +432,7 @@ impl Command {
             }
         }
         drop(permit);
+        dependencies.ready(self.name);
         let _ = self.outcome.send(report.unwrap());
         let _ = self.notify.send(()).await;
     }
@@ -342,6 +545,13 @@ impl CommandReporter {
                 CommandReport::Success => self
                     .progress
                     .finish_with_message(format!("{}", "success".green().bold())),
+                CommandReport::Error(RailyardError {
+                    kind: RailyardErrorKind::Cancelled,
+                    ..
+                }) => {
+                    self.progress
+                        .finish_with_message(format!("{}", "cancelled".dimmed().bold()));
+                }
                 CommandReport::Error(error) => {
                     self.progress
                         .finish_with_message(format!("{}", "internal error".red()));
